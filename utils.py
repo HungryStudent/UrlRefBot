@@ -22,6 +22,7 @@ sh = gc.open("Выгрузка amoCRM (2)")
 leads_ws = sh.get_worksheet(SheetTypes.Leads.value)
 users_ws = sh.get_worksheet(SheetTypes.Users.value)
 
+
 async def gen_url(user_id):
     res = await api.utils.get_short_link(url=site_url.format(tg_id=user_id), private=False)
     return res.key
@@ -29,7 +30,7 @@ async def gen_url(user_id):
 
 async def get_url_stat(key):
     res = await api.utils.get_link_stats(key=key, interval="forever")
-    if res.stats == []:
+    if not res.stats:
         return 0
     return res.stats[0].views
 
@@ -59,10 +60,12 @@ async def get_user_stat(user_id):
     user_stat["out"] = out
     return user_stat
 
+
 async def get_reqs(user_id):
     amount_re = re.compile(r'utm_campaign=' + str(user_id))
     reqs = leads_ws.findall(amount_re)
     return len(reqs)
+
 
 async def get_sells(user_id):
     amount_re = re.compile(r'utm_campaign=' + str(user_id))
@@ -76,7 +79,6 @@ async def get_sells(user_id):
     return sells_count
 
 
-
 async def update_stat():
     users_ws.resize(rows=1)
     users = db.get_users()
@@ -84,4 +86,4 @@ async def update_stat():
         user_stat = await get_user_stat(user[0])
         url = "https://vk.cc/" + user[1]
         ref_count = await get_url_stat(user[1])
-        users_ws.append_row([user[0], user[2], url, 1, user_stat["reqs"], user_stat["sells"]])
+        users_ws.append_row([user[0], user[2], url, ref_count, user_stat["reqs"], user_stat["sells"]])
