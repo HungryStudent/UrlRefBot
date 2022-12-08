@@ -7,6 +7,7 @@ from aiogram import Bot
 
 import keyboards as kb
 from config import *
+import asyncio
 import logging
 import utils
 import texts
@@ -24,8 +25,40 @@ class CardState(StatesGroup):
     enter_card = State()
 
 
+class SenderState(StatesGroup):
+    enter_msg = State()
+
+
 async def on_startup(_):
     db.start()
+
+
+@dp.message_handler(lambda m: m.from_user.id in admin_ids, commands='send')
+async def enter_text_for_send(message: Message):
+    await message.answer("Введите текст для рассылки\nДля отмены введите 0")
+    await SenderState.enter_msg.set()
+
+
+@dp.message_handler(lambda m: m.from_user.id in admin_ids, state=SenderState.enter_msg)
+async def start_send(message: Message, state: FSMContext):
+    if message.text == "0":
+        await message.answer("Ввод остановлен")
+        await state.finish()
+    else:
+        await message.answer("Начал рассылку")
+        await state.finish()
+        users = db.get_users()
+        count = 0
+        block_count = 0
+        for user in users:
+            try:
+                await message.bot.send_message(user[0], message.text)
+                count += 1
+            except:
+                block_count += 1
+            await asyncio.sleep(0.1)
+        await message.answer(
+            f"Количество получивших сообщение: {count}. Пользователей, заблокировавших бота: {block_count}")
 
 
 @dp.message_handler(lambda m: m.from_user.id in admin_ids, commands="update")
