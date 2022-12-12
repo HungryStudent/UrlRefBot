@@ -2,3 +2,4 @@ config.py
 creds.json
 users.db
 .idea
+start.bat

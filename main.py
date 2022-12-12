@@ -1,3 +1,4 @@
+from aiogram.dispatcher.filters import Text
 from aiogram.dispatcher.filters.state import StatesGroup, State
 from aiogram.types import Message, CallbackQuery, ContentTypes
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
@@ -27,6 +28,7 @@ class CardState(StatesGroup):
 
 class SenderState(StatesGroup):
     enter_msg = State()
+    enter_photo = State()
 
 
 async def on_startup(_):
@@ -34,9 +36,42 @@ async def on_startup(_):
 
 
 @dp.message_handler(lambda m: m.from_user.id in admin_ids, commands='send')
-async def enter_text_for_send(message: Message):
-    await message.answer("Введите текст для рассылки\nДля отмены введите 0")
-    await SenderState.enter_msg.set()
+async def choose_send_type(message: Message):
+    await message.answer("Выберите тип рассылки", reply_markup=kb.send_type)
+
+
+@dp.callback_query_handler(Text(startswith="send"))
+async def enter_text_for_send(call: CallbackQuery):
+    if call.data.split("_")[1] == "text":
+        await call.message.edit_text("Введите текст рассылки\nВведите 0, чтобы отменить рассылку")
+        await SenderState.enter_msg.set()
+    else:
+        await call.message.edit_text("Пришлите фото для рассылки или нажмите на кнопку", reply_markup=kb.in_cancel)
+        await SenderState.enter_photo.set()
+
+
+@dp.callback_query_handler(state="*", text="cancel")
+async def stop_send(call: CallbackQuery, state: FSMContext):
+    await call.message.edit_text("Ввод остановлен")
+    await state.finish()
+
+
+@dp.message_handler(lambda m: m.from_user.id in admin_ids, state=SenderState.enter_photo, content_types="photo")
+async def start_send_photo(message: Message, state: FSMContext):
+    await message.answer("Начал рассылку")
+    await state.finish()
+    users = db.get_users()
+    count = 0
+    block_count = 0
+    for user in users:
+        try:
+            await message.bot.send_photo(user[0], message.photo[-1].file_id)
+            count += 1
+        except:
+            block_count += 1
+        await asyncio.sleep(0.1)
+    await message.answer(
+        f"Количество получивших сообщение: {count}. Пользователей, заблокировавших бота: {block_count}")
 
 
 @dp.message_handler(lambda m: m.from_user.id in admin_ids, state=SenderState.enter_msg)
@@ -130,12 +165,16 @@ async def out_money(call: CallbackQuery):
 @dp.message_handler(state=CardState.enter_card)
 async def request_out_money(message: Message, state: FSMContext):
     card = message.text
+    user_stat = await utils.get_user_stat(message.from_user.id)
+    money = user_stat["ready_out"]
     await state.finish()
     await message.answer(texts.request_out_money, reply_markup=kb.to_menu)
+    out_id = db.append_out(message.from_user.id, money, card)
+
     await message.bot.send_message(helper_chat_id,
                                    texts.request_out_money_for_helper.format(username=message.from_user.username,
-                                                                             card=card))
-    db.append_out(message.from_user.id, 12)
+                                                                             card=card, money=money),
+                                   reply_markup=kb.get_admin_out(out_id))
 
 
 @dp.callback_query_handler(text="faq_page")
@@ -146,6 +185,24 @@ async def faq(call: CallbackQuery):
 @dp.callback_query_handler(text="support_page")
 async def support(call: CallbackQuery):
     await call.message.edit_text(texts.support, reply_markup=kb.support)
+
+
+@dp.callback_query_handler(kb.accept_out.filter())
+async def accept_out(call: CallbackQuery, callback_data: dict):
+    out_id = callback_data["out_id"]
+    db.change_out_status(out_id, True)
+    out = db.get_out(out_id)
+    await call.message.edit_text(texts.accept_out.format(user_id=out[0], price=out[1], card=out[2]))
+    await call.bot.send_message(out[0], texts.accept_out_user)
+
+
+@dp.callback_query_handler(kb.cancel_out.filter())
+async def accept_out(call: CallbackQuery, callback_data: dict):
+    out_id = callback_data["out_id"]
+    db.change_out_status(out_id, False)
+    out = db.get_out(out_id)
+    await call.message.edit_text(texts.cancel_out.format(user_id=out[0], price=out[1], card=out[2]))
+    await call.bot.send_message(out[0], texts.cancel_out_user)
 
 
 if __name__ == "__main__":

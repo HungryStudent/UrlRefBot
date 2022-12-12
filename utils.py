@@ -52,7 +52,7 @@ async def get_user_stat(user_id):
         balance += int(ref_data[2])
     balance *= 0.2
     out = db.get_outs(user_id)
-    ready_out = balance - out
+    ready_out = balance - db.get_ready_outs(user_id)
     if ready_out < 0:
         ready_out = 0
     user_stat["sells"] = sells_count
