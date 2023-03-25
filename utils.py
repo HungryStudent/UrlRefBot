@@ -9,7 +9,7 @@ import gspread
 
 class SheetTypes(Enum):
     Leads = 0
-    Users = 1
+    Users = 2
 
 
 api = API(token=vk_token)
@@ -45,11 +45,12 @@ async def get_user_stat(user_id):
     for ref in refs:
         ref_data = leads_ws.row_values(ref.row)
         try:
-            if ref_data[7] == "Успех":
+            if ref_data[3] == "Успех":
                 sells_count += 1
+                balance += int(ref_data[1])
         except IndexError:
             pass
-        balance += int(ref_data[2])
+        
     balance *= 0.2
     out = db.get_outs(user_id)
     ready_out = balance - db.get_ready_outs(user_id)
